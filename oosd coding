@@ -1,1 +1,417 @@
+from datetime import datetime
+
+# AUTHENTICATION SYSTEM
+
+class AuthenticationSystem:
+    def __init__(self):
+        self.users = {}           # Stores registered users, key=userID, value=User object
+        self.currentUser = None   # Currently logged-in user
+        self.lastUserID = None    # Last attempted login ID
+
+    def register(self, user):
+        self.users[user.userID] = user
+        print(f" User '{user.name}' registered with ID {user.userID}")
+
+    def login(self, userID, password):
+        self.lastUserID = userID
+        user = self.users.get(userID)
+
+        if user and user.checkPassword(password):
+            self.currentUser = user
+            print(f"\n Login successful! Welcome, '{user.name}'")
+            return user
+        print(f"\n Error: Failed login attempt for userID '{userID}'")
+        
+    def logout(self):
+        if self.currentUser:
+            print(f"Goodbye, {self.currentUser.name} has logged out.")
+        self.currentUser = None
+
+# USER CLASSES
+
+class User:
+  
+    def __init__(self, userID, name, email, password):
+        # Protected attributes
+        self.userID = userID # Encapsulated attribute
+        self.name = name     # Encapsulated attribute
+        self.email = email  # Encapsulated attribute
+        self._password = password  # Encapsulated attribute
+        self.active = True
+
+    # Getters
+    def checkPassword(self, password):
+        return self._password == password
+
+    def showDetails(self):
+        # Display user details (can be overridden)
+        return f"{self.name} ({self.__class__.__name__})"
+
+    def viewDashboard(self):
+        return f"Default dashboard for {self.name}"
+
+    def displayProfile(self):
+        # Return user profile info as a dictionary."""
+        return {
+            print("\n--- User Profile ---")
+            "User ID": self.userID,
+            "Name": self.name,
+            "Email": self.email,
+            "Role": self.__class__.__name__
+            print("--------------------")
+        }
+
+    def updateProfile(self, name=None, email=None):
+        # Update name or email
+        if name:
+            self.name = name
+        if email:
+            self.email = email
+
+    def deactivateAccount(self):
+        self.active = False
+
+    def viewProject(self, project):
+        return project.generateReport()
+
+# TeamLeader Class
+
+class TeamLeader(User):
+
+    def showDetails(self):
+        # Override User.showDetails
+        return f"TeamLeader: {self.name}"
+
+    def createProject(self, team, project):
+        # Assign a project to a team
+        team.project = project
+
+    def assignTask(self, task, member, team):
+        if member not in team.members:
+            raise ValueError(f"{member.name} is not part of team '{team.teamName}'")
+        task.member = member
+        task.notify(f"{member.name} has been assigned to task '{task.title}'")
+
+    def scheduleMeeting(self, team, meeting):
+        team.meetings.append(meeting)
+
+# TeamMember Class
+
+class TeamMember(User):
+
+    def __init__(self, userID, name, email, password):
+        super().__init__(userID, name, email, password)
+        self.completedTasks = 0
+
+    def updateTask(self, task, status="Done", comment=None, notify=True):
+        task.updateStatus(status, notify, comment)
+        if status == "Done":
+            self.completedTasks += 1
+
+    def joinTeam(self, team):
+        if team.addMember(self):
+            print(f" {self.name} joined the team '{team.teamName}' successfully")
+        else:
+            print(f" {self.name} could not join '{team.teamName}'. Team is full")
+
+    def giveFeedback(self, content):
+        return {"member": self.name, "feedback": content}
+
+# Lecturer Class
+
+class Lecturer(User):
+
+    def viewProject(self, project):
+        return {"Project": project.title, "Progress (%)": project.calculateProgress()}
+
+    def reviewReport(self, project):
+        return project.generateReport()
+
+    def trackTeamPerformance(self, team):
+        if not team.project:
+            return "No project assigned to this team."
+        return {
+            "Team": team.teamName,
+            "Project": team.project.title,
+            "Progress (%)": team.project.calculateProgress()
+        }
+
+# TEAM & PROJECT
+
+class Team:
+
+    MAX_MEMBERS = 4  # Total including the leader
+
+    def __init__(self, teamID, teamName, leader):
+        self.teamID = teamID
+        self.teamName = teamName
+        self.leader = leader
+        self.members = []
+        self.project = None
+        self.meetings = []
+
+    def addMember(self, member):
+        # Add a member if max limit not exceeded
+        if len(self.members) + 1 >= Team.MAX_MEMBERS:
+            print(f"[WARN] Cannot add '{member.name}': team '{self.teamName}' already has {Team.MAX_MEMBERS} members")
+            return False
+        self.members.append(member)
+        print(f"[INFO] Member '{member.name}' added to team '{self.teamName}'")
+        return True
+
+    def removeMember(self, leader, member):
+        # Remove a member if requester is the team leader
+        if leader != self.leader:
+            raise PermissionError("Only the team leader can remove members")
+        self.members.remove(member)
+        print(f"[INFO] Member '{member.name}' removed from team '{self.teamName}'")
+
+    def showDetails(self):
+        return {
+            "Team ID": self.teamID,
+            "Team Name": self.teamName,
+            "Leader": self.leader.name,
+            "Members": [m.name for m in self.members],
+            "Project": self.project.title if self.project else "No project assigned",
+            "Meetings Scheduled": len(self.meetings)
+        }
+
+    def updateTeam(self, name=None, leader=None):
+        # Update team name or leader
+        if name:
+            self.teamName = name
+        if leader:
+            self.leader = leader
+
+    def deleteTeam(self):
+        self.members.clear()
+        self.project = None
+        self.meetings.clear()
+
+# Project Class
+
+class Project:
+
+    def __init__(self, projectID, title):
+        self.projectID = projectID
+        self.title = title
+        self.tasks = []
+
+    def createTask(self, task):
+        self.tasks.append(task)
+        print(f" Task '{task.title}' created in project '{self.title}'")
+
+    def deleteTask(self, taskID):
+        self.tasks = [t for t in self.tasks if t.taskID != taskID]
+
+    def updateProject(self, title=None):
+        if title:
+            self.title = title
+
+    def deleteProject(self):
+        self.tasks.clear()
+
+    def calculateProgress(self):
+        if not self.tasks:
+            return 0
+        done = sum(1 for t in self.tasks if t.status == "Done")
+        return round((done / len(self.tasks)) * 100, 2)
+
+    def generateReport(self):
+        return {
+            "Project": self.title,
+            "Progress (%)": self.calculateProgress(),
+            "Tasks": [(t.title, t.status) for t in self.tasks]
+        }
+
+# TASK & COMMENT
+
+class Task:
+
+    def __init__(self, taskID, title, description, member, deadline, priority):
+        self.taskID = taskID
+        self.title = title
+        self.description = description
+        self.member = member
+        self.deadline = deadline
+        self.priority = priority
+        self.status = "To Do"
+        self.comments = []
+        self.notifications = []
+
+    def updateStatus(self, status, notify=True, comment=None):
+        self.status = status
+        print(f" Task '{self.title}' status updated to '{status}'")
+        if notify:
+            self.notify(f"Task '{self.title}' updated to {status}")
+        if comment:
+            self.addComment(Comment("System", comment))
+            print(f" Comment added to task '{self.title}': {comment}")
+
+    def addComment(self, comment):
+        self.comments.append(comment)
+        print(f" Comment by '{comment.author}' added to task '{self.title}'")
+
+    def notify(self, message):
+        self.notifications.append(f"[Notification] {message}")
+
+class Comment:
+
+    def __init__(self, author, text):
+        self.author = author
+        self.text = text
+        self.timestamp = datetime.now()
+        self._comments = []
+
+    def addComment(self, author, text):
+        self._comments.append({"author": author, "text": text})
+
+    def updateComment(self, index, newText):
+        if 0 <= index < len(self._comments):
+            self._comments[index]["text"] = newText
+        else:
+            raise IndexError("Comment index out of range")
+
+    def removeComment(self, index):
+        if 0 <= index < len(self._comments):
+            self._comments.pop(index)
+        else:
+            raise IndexError("Comment index out of range")
+
+    def showComment(self):
+        return self._comments
+
+# MEETING & FEEDBACK
+
+class Meeting:
+
+    def __init__(self, meetingID, agenda, dateTime=None):
+        self.meetingID = meetingID
+        self.agenda = agenda
+        self.dateTime = dateTime
+        self.isScheduled = False
+        self.isCancelled = False
+
+    def scheduleMeeting(self, dateTime):
+        self.dateTime = dateTime
+        self.isScheduled = True
+        self.isCancelled = False
+        print(f" Meeting '{self.meetingID}' scheduled at {self.dateTime}")
+        return f"Meeting {self.meetingID} scheduled at {self.dateTime}"
+
+    def cancelMeeting(self):
+        if not self.isScheduled:
+            print(f" Attempted to cancel unscheduled meeting '{self.meetingID}'")
+            return "Meeting is not scheduled."
+        self.isScheduled = False
+        self.isCancelled = True
+        print(f" Meeting '{self.meetingID}' cancelled")
+        return f"Meeting {self.meetingID} has been cancelled."
+
+    def notifyMembers(self, members):
+        return [f"Notification sent to {m.name} about meeting {self.meetingID}" for m in members]
+
+class Feedback:
+
+    def __init__(self, reviewer=None, reviewee=None, comment=None, rating=None):
+        self.reviewer = reviewer
+        self.reviewee = reviewee
+        self.comment = comment
+        self.rating = rating
+        self._feedbackList = []
+
+    def giveFeedback(self, reviewer, reviewee, comment, rating):
+        self.reviewer = reviewer
+        self.reviewee = reviewee
+        self.comment = comment
+        self.rating = rating
+        feedback = {"Reviewer": reviewer, "Reviewee": reviewee, "Comment": comment, "Rating": rating}
+        self._feedbackList.append(feedback)
+        print(f" Feedback added by '{reviewer}' for '{reviewee}' with rating {rating}")
+
+    def updateFeedback(self, index, comment=None, rating=None):
+        if 0 <= index < len(self._feedbackList):
+            if comment:
+                self._feedbackList[index]["Comment"] = comment
+            if rating:
+                self._feedbackList[index]["Rating"] = rating
+        else:
+            raise IndexError("Feedback index out of range")
+
+    def removeFeedback(self, index):
+        if 0 <= index < len(self._feedbackList):
+            self._feedbackList.pop(index)
+        else:
+            raise IndexError("Feedback index out of range")
+
+    def generateSummary(self):
+        if not self._feedbackList:
+            return "No feedback available."
+        average_rating = sum(f["Rating"] for f in self._feedbackList) / len(self._feedbackList)
+        return {"Total Reviews": len(self._feedbackList), "Average Rating": round(average_rating, 2)}
+
+    def showAllFeedback(self):
+        return self._feedbackList
+
+# TEST CASES
+
+def run_tests():
+    print("=== Running Test Cases ===")
+
+    # Users
+    leader = TeamLeader("U1", "Lydia", "104816@siswa.unimas.my", "123")
+    member1 = TeamMember("U2", "Euphrasia", "104073@siswa.unimas.my", "111")
+    member2 = TeamMember("U3", "Lau Xu Kun", "84284@siswa.unimas.my", "222")
+    member3 = TeamMember("U4", "Jordan", "102634@siswa.unimas.my", "333")
+    member4 = TeamMember("U5", "Adryana", "103091@siswa.unimas.my", "444")  # Should fail due to max members
+    lecturer = Lecturer("U6", "Dr Tan Ping Ping", "pptan@unimas.my", "789")
+
+    # Team
+    team = Team("T1", "OOSD Group 9", leader)
+    for m in [member1, member2, member3, member4]:
+        m.joinTeam(team)
+
+    # Auth
+    auth = AuthenticationSystem()
+    auth.register(leader)
+    auth.register(member1)
+    auth.register(lecturer)
+
+    # Login test
+    logged_in_user = auth.login("U1", "123")
+    assert logged_in_user == leader
+    assert auth.currentUser == leader
+    print("[TEST] Login test passed")
+
+    # Logout test
+    auth.logout()
+    assert auth.currentUser is None
+    print("[TEST] Logout test passed")
+
+    # Team member count check
+    assert len(team.members) == 3  # Max members excluding leader
+    print("[TEST] Max team members enforced correctly")
+
+    # Project and Task
+    project = Project("P1", "Collaboration Platform")
+    leader.createProject(team, project)
+    task = Task("T1", "Design Diagram", "Draw class diagram", member1, "2025-06-01", "High")
+    project.createTask(task)
+    member1.updateTask(task, "Done")
+    assert task.status == "Done"
+
+    # Feedback
+    feedback = Feedback()
+    feedback.giveFeedback(leader.name, member1.name, "Great contribution", 5)
+    assert len(feedback.showAllFeedback()) == 1
+
+    # Progress
+    assert project.calculateProgress() == 100
+    report = lecturer.viewProject(project)
+    assert report["Progress (%)"] == 100
+
+    print("=== All test cases passed successfully! ===")
+
+if __name__ == "__main__":
+    run_tests()
 
