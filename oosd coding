@@ -4,7 +4,7 @@ from datetime import datetime
 
 class AuthenticationSystem:
     def __init__(self):
-        self.users = {}           # Stores registered users, key=userID, value=User object
+        self.users = {}           # Stores registered users
         self.currentUser = None   # Currently logged-in user
         self.lastUserID = None    # Last attempted login ID
 
@@ -25,7 +25,7 @@ class AuthenticationSystem:
         
     def logout(self):
         if self.currentUser:
-            print(f"Goodbye, {self.currentUser.name} has logged out.")
+            print(f"Goodbye. {self.currentUser.name} has logged out.")
         self.currentUser = None
 
 # USER CLASSES
@@ -84,6 +84,20 @@ class TeamLeader(User):
         # Override User.showDetails
         return f"TeamLeader: {self.name}"
 
+    def viewDashboard(self, team=None):
+        print("\n=== Team Leader Dashboard ===")
+        dashboard = {
+            "Role": "Team Leader",
+            "Name": self.name,
+            "Team": team.teamName if team else "No team",
+            "Members": len(team.members) if team else 0,
+            "Project": team.project.title if team and team.project else "No project",
+            "Meetings": len(team.meetings) if team else 0
+        }
+
+        print("=============================")
+        return dashboard
+
     def createProject(self, team, project):
         # Assign a project to a team
         team.project = project
@@ -105,6 +119,13 @@ class TeamMember(User):
         super().__init__(userID, name, email, password)
         self.completedTasks = 0
 
+    def viewDashboard(self):
+        return {
+            "Role": "Team Member",
+            "Name": self.name,
+            "Completed Tasks": self.completedTasks
+        }
+
     def updateTask(self, task, status="Done", comment=None, notify=True):
         task.updateStatus(status, notify, comment)
         if status == "Done":
@@ -122,6 +143,13 @@ class TeamMember(User):
 # Lecturer Class
 # Polymorphism: different roles override viewProject()
 class Lecturer(User):
+
+    def viewDashboard(self):
+        return {
+            "Role": "Lecturer",
+            "Name": self.name,
+            "Access": "View all team progress and reports"
+        }
 
     def viewProject(self, project):
         return {"Project": project.title, "Progress (%)": project.calculateProgress()}
@@ -156,18 +184,25 @@ class Team:
         # Add a member if max limit not exceeded
         total_members = len(self.members) + 1  # +1 for leader
         if total_members >= Team.MAX_MEMBERS:
-            print(f"[WARN] Team '{self.teamName}' already has the maximum of {Team.MAX_MEMBERS} members")
+            print(f"Team '{self.teamName}' already has the maximum of {Team.MAX_MEMBERS} members")
             return False
         self.members.append(member)
-        print(f"[INFO] Member '{member.name}' added to team '{self.teamName}'")
+        print(f" Member '{member.name}' added to team '{self.teamName}'")
         return True
 
     def removeMember(self, leader, member):
-        # Remove a member if requester is the team leader
+       # Authorization check
         if leader != self.leader:
             raise PermissionError("Only the team leader can remove members")
+
+        # Safety check
+        if member not in self.members:
+            print(" Member not found in team")
+            return
+
         self.members.remove(member)
-        print(f"[INFO] Member '{member.name}' removed from team '{self.teamName}'")
+        print(f" Member '{member.name}' removed from team '{self.teamName}'")
+
 
     def showDetails(self):
         return {
@@ -404,6 +439,10 @@ def run_tests():
     assert len(team.members) == 3  # Max members excluding leader
     print(" Max team members enforced")
 
+    print(leader.viewDashboard(team))
+    print(member1.viewDashboard())
+    print(lecturer.viewDashboard())
+    
     # UC4: Manage Team Members
     # Permission test: non-leader tries to remove a member
     try:
