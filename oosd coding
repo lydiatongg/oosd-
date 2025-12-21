@@ -16,16 +16,16 @@ class AuthenticationSystem:
         self.lastUserID = userID
         user = self.users.get(userID)
 
-        if user and user.checkPassword(password):
+        if user and user.verifyPassword(password):
             self.currentUser = user
-            print(f"\n Login successful! Welcome, '{user.name}'")
+            print(f"\n Login OK. Welcome, '{user.name}'!")
             return user
-        print(f"\n Error: Failed login attempt for userID '{userID}'")
+        print(f"\n Oops! Login failed. Check your user ID or password.")
         return None
         
     def logout(self):
         if self.currentUser:
-            print(f"Goodbye. {self.currentUser.name} has logged out.")
+            print(f"Goodbye. {self.currentUser.name} logged out.")
         self.currentUser = None
 
 # USER CLASSES
@@ -41,7 +41,7 @@ class User:
         self.active = True
 
     # Getters
-    def checkPassword(self, password):
+    def verifyPassword(self, password):
         return self._password == password
 
     def showDetails(self):
@@ -64,12 +64,20 @@ class User:
 
 
     def updateProfile(self, name=None, email=None):
-        # Update name or email
+        changes = []
+        # Update name if a new one is given
         if name:
             self.name = name
-        if email:
-            self.email = email
+            changes.append(f"Name updated to {name}")
 
+        # Update email if a new one is given
+        if email:
+            if "@" not in email:
+                return "Invalid email format. Update cancelled."
+            self.email = email
+            changes.append(f"Email updated to {email}")
+        return changes or "No changes were provided for the profile."
+            
     def deactivateAccount(self):
         self.active = False
 
@@ -99,7 +107,8 @@ class TeamLeader(User):
         return dashboard
 
     def createProject(self, team, project):
-        # Assign a project to a team
+        # Team leader creates and links a project to their team
+        # This is only done once per team
         team.project = project
 
     def assignTask(self, task, member, team):
@@ -127,6 +136,7 @@ class TeamMember(User):
         }
 
     def updateTask(self, task, status="Done", comment=None, notify=True):
+        # Update task status and optionally add a comment
         task.updateStatus(status, notify, comment)
         if status == "Done":
             self.completedTasks += 1
@@ -141,7 +151,8 @@ class TeamMember(User):
         feedbackSystem.giveFeedback(self.name, reviewee.name, comment, rating)
 
 # Lecturer Class
-# Polymorphism: different roles override viewProject()
+# Polymorphism
+#This override allows Lecturers to see project progress without modifying the original User class
 class Lecturer(User):
 
     def viewDashboard(self):
@@ -249,6 +260,7 @@ class Project:
         print(f" Task '{task.title}' created in project '{self.title}'")
 
     def deleteTask(self, taskID):
+        # Simple removal without notification
         self.tasks = [t for t in self.tasks if t.taskID != taskID]
 
     def updateProject(self, title=None):
@@ -283,24 +295,54 @@ class Task:
         self.deadline = deadline
         self.priority = priority
         self.status = "To Do"
+        self.lastUpdated = datetime.now()
         self.comments = []
         self.notifications = []
 
+    # Status update
     def updateStatus(self, status, notify=True, comment=None):
+        if status not in ["To Do", "In Progress", "Done"]:
+            print("Invalid task status")
+            return
         self.status = status
-        print(f" Task '{self.title}' status updated to '{status}'")
+        self.lastUpdated = datetime.now()
         if notify:
-            self.notify(f"Task '{self.title}' updated to {status}")
+            self.notify(f"Task '{self.title}' updated to '{status}'")
         if comment:
-            self.addComment(Comment("System", comment))
-            print(f" Comment added to task '{self.title}': {comment}")
+            self.addComment(self.member.name, comment)
 
-    def addComment(self, comment):
-        self.comments.append(comment)
-        print(f" Comment by '{comment.author}' added to task '{self.title}'")
-
+    # Notifications
     def notify(self, message):
-        self.notifications.append(f"[Notification] {message}")
+        # Add message to notifications and print it
+        self.notifications.append(message)
+        print(f"{message}")
+
+    # Comment collection management
+    def addComment(self, author, text):
+        comment = Comment(author, text)
+        self.comments.append(comment)
+        print(f" '{author}' commented on task '{self.title}'")
+
+    def updateComment(self, index, newText):
+        if 0 <= index < len(self.comments):
+            self.comments[index].update(newText)
+        else:
+            print("Invalid comment index")
+
+    def removeComment(self, index):
+        if 0 <= index < len(self.comments):
+            self.comments[index].delete()
+        else:
+            print("Invalid comment index")
+
+    def showComments(self):
+        if not self.comments:
+            print(f"No comments yet for task '{self.title}'")
+            return
+        print(f"\n--- Comments for task '{self.title}' ---")
+        for i, c in enumerate(self.comments):
+            print(f"{i}: {c.show()}")
+
 
 class Comment:
 
@@ -308,25 +350,22 @@ class Comment:
         self.author = author
         self.text = text
         self.timestamp = datetime.now()
-        self._comments = []
 
-    def addComment(self, author, text):
-        self._comments.append({"author": author, "text": text})
+    # Read 
+    def show(self):
+        return f"{self.author} ({self.timestamp:%Y-%m-%d %H:%M}): {self.text}"
 
-    def updateComment(self, index, newText):
-        if 0 <= index < len(self._comments):
-            self._comments[index]["text"] = newText
-        else:
-            raise IndexError("Comment index out of range")
+    # Update
+    def update(self, newText):
+        self.text = newText
+        print(f"Comment by {self.author} updated to: {self.text}")
 
-    def removeComment(self, index):
-        if 0 <= index < len(self._comments):
-            self._comments.pop(index)
-        else:
-            raise IndexError("Comment index out of range")
+    # Delete
+    def delete(self):
+        # Soft delete to preserve comment history
+        self.text = "[deleted]"
+        print(f"Comment by {self.author} has been deleted")
 
-    def showComment(self):
-        return self._comments
 
 # MEETING & FEEDBACK
 
@@ -368,11 +407,23 @@ class Feedback:
         self._feedbackList = []
 
     def giveFeedback(self, reviewer, reviewee, comment, rating):
+        # Basic validation for rating
+        if rating < 1 or rating > 5:
+            print("Rating must be between 1 and 5")
+            return
+
         self.reviewer = reviewer
         self.reviewee = reviewee
         self.comment = comment
         self.rating = rating
-        feedback = {"Reviewer": reviewer, "Reviewee": reviewee, "Comment": comment, "Rating": rating}
+
+        feedback = {
+            "Reviewer": reviewer,
+            "Reviewee": reviewee,
+            "Comment": comment,
+            "Rating": rating
+        }
+
         self._feedbackList.append(feedback)
         print(f" Feedback added by '{reviewer}' for '{reviewee}' with rating {rating}")
 
@@ -424,7 +475,7 @@ def run_tests():
     auth.register(member1)
     auth.register(lecturer)
 
-    # UC1: User Login
+    # UC1: User Login Test
     logged_in_user = auth.login("U1", "123")
     assert logged_in_user == leader
     assert auth.currentUser == leader
@@ -463,7 +514,8 @@ def run_tests():
     task = Task("T1", "Design Diagram", "Draw class diagram", member1, "2025-06-01", "High")
     project.createTask(task)
 
-    # UC6: Update Task Status
+    # UC6: Update Task Status By Team Member
+    # Expected status change and task count increases
     member1.updateTask(task, "Done")
     assert task.status == "Done"
     print("Task updated successfully")
