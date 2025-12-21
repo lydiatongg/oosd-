@@ -1,6 +1,6 @@
 from datetime import datetime
 
-# AUTHENTICATION SYSTEM
+# Authentication System
 
 class AuthenticationSystem:
     def __init__(self):
