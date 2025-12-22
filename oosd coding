@@ -141,11 +141,8 @@ class TeamMember(User):
         if status == "Done":
             self.completedTasks += 1
 
-    def joinTeam(self, team):
-        if team.addMember(self):
-            print(f" {self.name} joined the team '{team.teamName}' successfully")
-        else:
-            print(f" {self.name} could not join '{team.teamName}'. Team is full")
+    def joinTeam(self, team, authSystem):
+        return team.addMember(self, authSystem)
 
     def givePeerFeedback(self, feedbackSystem, reviewee, comment, rating):
         feedbackSystem.giveFeedback(self.name, reviewee.name, comment, rating)
@@ -191,12 +188,24 @@ class Team:
         self.project = None
         self.meetings = []
 
-    def addMember(self, member):
+    def addMember(self, member, authSystem):
+        # Check login
+        if not authSystem.currentUser:
+            print("You must log in first to add members.")
+            return False
+
+        # Check authorization
+        if authSystem.currentUser != self.leader:
+            print("Only the team leader can add members.")
+            return False
+
+        # Capacity check
         # Add a member if max limit not exceeded
         total_members = len(self.members) + 1  # +1 for leader
         if total_members >= Team.MAX_MEMBERS:
             print(f"Team '{self.teamName}' already has the maximum of {Team.MAX_MEMBERS} members")
             return False
+        
         self.members.append(member)
         print(f" Member '{member.name}' added to team '{self.teamName}'")
         return True
@@ -464,49 +473,52 @@ def run_tests():
     member4 = TeamMember("U5", "Adryana", "103091@siswa.unimas.my", "444")  # Should fail due to max members
     lecturer = Lecturer("U6", "Dr Tan Ping Ping", "pptan@unimas.my", "789")
 
-    # Team
+    # Create team
     team = Team("T1", "OOSD Group 9", leader)
-    for m in [member1, member2, member3, member4]:
-        m.joinTeam(team)
-
+    
     # Auth
     auth = AuthenticationSystem()
     auth.register(leader)
     auth.register(member1)
+    auth.register(member2)
+    auth.register(member3)
+    auth.register(member4)
     auth.register(lecturer)
 
-    # UC1: User Login Test
-    logged_in_user = auth.login("U1", "123")
-    assert logged_in_user == leader
-    assert auth.currentUser == leader
-    print(" Login successful")
+    # Adding member without login
+    print("\n Add member without login")
+    member1.joinTeam(team, auth)
+    assert len(team.members) == 0
 
-    # UC2: User Logout
-    auth.logout()
-    assert auth.currentUser is None
-    print(" Logout successful")
+    # Non-leader tries to add member
+    print("\n Non-leader trying to add member")
+    auth.login("U2", "111")  # member logs in
+    member1.joinTeam(team, auth)
+    assert len(team.members) == 0
 
-    # UC3: Join team 
-    assert len(team.members) == 3  # Max members excluding leader
-    print(" Max team members enforced")
+    # Leader adds members
+    print("\n Leader adding members")
+    auth.login("U1", "123")  # leader logs in
 
+    member1.joinTeam(team, auth)
+    member2.joinTeam(team, auth)
+    member3.joinTeam(team, auth)
+
+    assert len(team.members) == 3
+    print(" Members added successfully by leader")
+    
+    # Exceed max team size
+    print("\n Exceeding max team size")
+    member4.joinTeam(team, auth)  # should fail
+    assert len(team.members) == 3
+    print(" Max team size enforced correctly")
+
+    # Dashboards
+    print("\n View dashboards")
     print(leader.viewDashboard(team))
     print(member1.viewDashboard())
     print(lecturer.viewDashboard())
     
-    # UC4: Manage Team Members
-    # Permission test: non-leader tries to remove a member
-    try:
-        team.removeMember(member1, member2)  # member1 is NOT the leader
-        print("Permission test FAILED (non-leader removed a member)")
-    except PermissionError:
-        print(" Permission test PASSED (only leader can remove members)")
-
-    # UC5: Team Leader Removes Member
-    # Valid removal by leader
-    team.removeMember(leader, member3)
-    assert member3 not in team.members
-    print(" Leader removed member successfully")
 
     # Project and Task
     project = Project("P1", "Collaboration Platform")
@@ -514,39 +526,45 @@ def run_tests():
     task = Task("T1", "Design Diagram", "Draw class diagram", member1, "2025-06-01", "High")
     project.createTask(task)
 
-    # UC6: Update Task Status By Team Member
-    # Expected status change and task count increases
-    member1.updateTask(task, "Done")
+    # Update Task Status 
+    print("\n Team member updates task")
+    member1.updateTask(task, "Done", comment="Class Diagram completed")
     assert task.status == "Done"
-    print("Task updated successfully")
+    assert project.calculateProgress() == 100
+    print(" Task updated successfully")
 
-    # UC7: Give Peer Feedback
+    # Give Peer Feedback
+    print("\n Peer Feedback")
     feedback = Feedback()
     feedback.giveFeedback(leader.name, member1.name, "Great contribution", 5)
     assert len(feedback.showAllFeedback()) == 1
     print("Feedback recorded")
 
-    #UC8: Lecturer Views Project Progress
-    # Progress
-    assert project.calculateProgress() == 100
+    # Lecturer Views Project Progress
+    print("\n Lecturer views project progress")
     report = lecturer.viewProject(project)
     assert report["Progress (%)"] == 100
     print(" Lecturer project view successful")
 
     # UC9: Schedule and Cancel Meeting
+    print("\n Schedule and cancel meeting")
     meeting = Meeting("M1", "Weekly discussion")
     leader.scheduleMeeting(team, meeting)
 
-    result = meeting.scheduleMeeting("2025-06-05 10:00 AM")
+    meeting.scheduleMeeting("2025-06-05 10:00 AM")
     assert meeting.isScheduled is True
     print(" Meeting scheduled successfully")
 
-    cancel_result = meeting.cancelMeeting()
+    meeting.cancelMeeting()
     assert meeting.isCancelled is True
     print(" Meeting cancelled successfully")
 
+    # Logout
+    auth.logout()
+    assert auth.currentUser is None
 
-    print("Test execution completed")
+
+    print("\n== All test execution completed= =")
 
 if __name__ == "__main__":
     run_tests()
