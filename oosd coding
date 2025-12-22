@@ -1,14 +1,15 @@
 from datetime import datetime
 
 # Authentication System
-
+# Handles user registration, login & logout functionality
 class AuthenticationSystem:
     def __init__(self):
-        self.users = {}           # Stores registered users
+        # Attributes
+        self.users = {}           # Dictionary to store registered users with user ID as key 
         self.currentUser = None   # Currently logged-in user
         self.lastUserID = None    # Last attempted login ID
 
-    def register(self, user):
+    def register(self, user):       # Registers a new user in the system
         self.users[user.userID] = user
         print(f" User '{user.name}' registered with ID {user.userID}")
 
@@ -123,7 +124,6 @@ class TeamLeader(User):
 # TeamMember Class
 
 class TeamMember(User):
-
     def __init__(self, userID, name, email, password):
         super().__init__(userID, name, email, password)
         self.completedTasks = 0
@@ -142,8 +142,11 @@ class TeamMember(User):
             self.completedTasks += 1
 
     def joinTeam(self, team, authSystem):
+        if not authSystem.currentUser:
+            print("Please login first.")
+            return False
         return team.addMember(self, authSystem)
-
+       
     def givePeerFeedback(self, feedbackSystem, reviewee, comment, rating):
         feedbackSystem.giveFeedback(self.name, reviewee.name, comment, rating)
 
@@ -177,52 +180,47 @@ class Lecturer(User):
 # TEAM & PROJECT
 
 class Team:
-    # Team size is limited to avoid overload
     MAX_MEMBERS = 4  # Total including the leader
 
     def __init__(self, teamID, teamName, leader):
         self.teamID = teamID
         self.teamName = teamName
         self.leader = leader
-        self.members = []
+        self.members = [leader]
         self.project = None
         self.meetings = []
 
     def addMember(self, member, authSystem):
-        # Check login
         if not authSystem.currentUser:
             print("You must log in first to add members.")
             return False
 
-        # Check authorization
         if authSystem.currentUser != self.leader:
             print("Only the team leader can add members.")
             return False
 
-        # Capacity check
-        # Add a member if max limit not exceeded
-        total_members = len(self.members) + 1  # +1 for leader
-        if total_members >= Team.MAX_MEMBERS:
+        if member in self.members:
+            print(f"{member.name} is already in the team.")
+            return False
+
+        if len(self.members) >= Team.MAX_MEMBERS:
             print(f"Team '{self.teamName}' already has the maximum of {Team.MAX_MEMBERS} members")
             return False
-        
+
         self.members.append(member)
-        print(f" Member '{member.name}' added to team '{self.teamName}'")
+        print(f"Member '{member.name}' added to team '{self.teamName}'")
         return True
 
     def removeMember(self, leader, member):
-       # Authorization check
         if leader != self.leader:
             raise PermissionError("Only the team leader can remove members")
 
-        # Safety check
         if member not in self.members:
-            print(" Member not found in team")
+            print("Member not found in team")
             return
 
         self.members.remove(member)
-        print(f" Member '{member.name}' removed from team '{self.teamName}'")
-
+        print(f"Member '{member.name}' removed from team '{self.teamName}'")
 
     def showDetails(self):
         return {
@@ -235,7 +233,6 @@ class Team:
         }
 
     def updateTeam(self, name=None, leader=None):
-        # Update team name or leader
         if name:
             self.teamName = name
         if leader:
@@ -248,12 +245,11 @@ class Team:
 
     def sendMessage(self, sender, message):
         notifications = []
-        recipients = self.members + [self.leader]
-
-        for member in recipients:
+        for member in self.members:
             if member != sender:
                 notifications.append(f"Message from {sender.name}: {message}")
         return notifications
+
 
 # Project Class
 
@@ -264,6 +260,7 @@ class Project:
         self.title = title
         self.tasks = []
 
+    # Task Management 
     def createTask(self, task):
         self.tasks.append(task)
         print(f" Task '{task.title}' created in project '{self.title}'")
@@ -282,6 +279,7 @@ class Project:
     def calculateProgress(self):
         if not self.tasks:
             return 0
+        # Calculate project progress as pecentage of tasks marked 'Done'
         done = sum(1 for t in self.tasks if t.status == "Done")
         return round((done / len(self.tasks)) * 100, 2)
 
@@ -460,233 +458,223 @@ class Feedback:
     def showAllFeedback(self):
         return self._feedbackList
 
+# User Menu
+def user_menu(auth, team, members):
+    user = auth.currentUser
+
+    while auth.currentUser:
+        print(f"\n=== {user.__class__.__name__} MENU ===")
+        print("1. View Dashboard")
+        print("2. Team Actions")
+        print("3. Project Actions")
+        print("4. Meeting Actions")
+        print("5. Logout")
+
+        choice = input("Choose: ").strip()
+
+        if choice == "1":
+            if isinstance(user, TeamLeader):
+                print(user.viewDashboard(team))
+            else:
+                print(user.viewDashboard())
+
+        elif choice == "2":
+            team_actions(user, team, auth, members)
+
+        elif choice == "3":
+            project_actions(user, team)
+
+        elif choice == "4":
+            meeting_actions(user, team)
+
+        elif choice == "5":
+            auth.logout()
+            break
+
+        else:
+            print("Invalid choice.")
+
+# Team Actions Accessible by Leader only
+def team_actions(user, team, auth, members):
+    if not isinstance(user, TeamLeader):
+        print("Only the team leader can manage members.")
+        return
+
+    print("\n1. Add Member")
+    print("2. Remove Member")
+    choice = input("Choose: ")
+
+    if choice == "1":
+        for m in members:
+            if m not in team.members:
+                print(f"- {m.name}")
+
+        name = input("Enter member name: ")
+        member = next((m for m in members if m.name == name), None)
+        if member:
+            member.joinTeam(team, auth)
+        else:
+            print("Member not found.")
+
+    elif choice == "2":
+        for m in team.members:
+            print(f"- {m.name}")
+
+        name = input("Enter member name: ")
+        member = next((m for m in team.members if m.name == name), None)
+        if member:
+            team.removeMember(user, member)
+        else:
+            print("Member not found.")
+
+# Project Actions Accessible By Leader, Member & Lecturer
+def project_actions(user, team):
+    if not team.project and isinstance(user, TeamLeader):
+        title = input("Enter project title: ")
+        team.project = Project("P1", title)
+        print("Project created.")
+
+    project = team.project
+    if not project:
+        print("No project available.")
+        return
+
+    # TEAM LEADER
+    if isinstance(user, TeamLeader):
+        print("1. Create Task")
+        print("2. Update Task Status")
+        choice = input("Choose: ")
+
+        if choice == "1":
+            title = input("Task title: ")
+            desc = input("Description: ")
+            name = input("Assign to member: ")
+            member = next((m for m in team.members if m.name == name), None)
+            if member:
+                task = Task(f"T{len(project.tasks)+1}", title, desc, member, "2025-06-30", "High")
+                project.createTask(task)
+            else:
+                print("Member not found.")
+
+        elif choice == "2":
+            for t in project.tasks:
+                print(f"- {t.title} [{t.status}]")
+            name = input("Task name: ")
+            task = next((t for t in project.tasks if t.title == name), None)
+            if task:
+                status = input("New status: ")
+                task.updateStatus(status)
+
+    # TEAM MEMBER
+    elif isinstance(user, TeamMember):
+        # Only show tasks assigned to the member that are not done yet
+        available_tasks = [t for t in project.tasks if t.member == user and t.status != "Done"]
+
+        if not available_tasks:
+            print("No pending tasks assigned to you.")
+        else:
+            print("Your pending tasks:")
+            for t in available_tasks:
+                print(f"- {t.title} [{t.status}]")
+        
+            name = input("Task to mark Done: ").strip()
+            task = next((t for t in available_tasks if t.title.strip() == name), None)
+            if not task:
+                print("Task not found or already completed.")
+            else:
+                comment = input("Add a comment (optional):").strip()
+                user.updateTask(task, comment=comment if comment else None)
+
+
+    # LECTURER
+    elif isinstance(user, Lecturer):
+        print(user.viewProject(project))
+
+# Meeting Actions
+def meeting_actions(user, team):
+    print("1. Schedule Meeting")
+    print("2. Cancel Meeting")
+    choice = input("Choose: ")
+
+    if choice == "1":
+        if not isinstance(user, TeamLeader):
+            print("Only leader can schedule meetings.")
+            return
+        agenda = input("Agenda: ")
+        meeting = Meeting(f"M{len(team.meetings)+1}", agenda)
+        time = input("Date & Time: ")
+        meeting.scheduleMeeting(time)
+        team.meetings.append(meeting)
+
+    elif choice == "2":
+        if not team.meetings:
+            print("No meetings.")
+            return
+        for m in team.meetings:
+            print(f"- {m.meetingID}: {m.agenda}")
+        mid = input("Meeting ID: ")
+        meeting = next((m for m in team.meetings if m.meetingID == mid), None)
+        if meeting and isinstance(user, TeamLeader):
+            meeting.cancelMeeting()
+
+
 # Test Cases
 def run_tests():
-    print("=== Welcome to the Team Collaboration System ===")
+    auth = AuthenticationSystem()
 
-    # Initial placeholders
     leader = None
-    member1 = None
-    member2 = None
-    member3 = None
+    member1 = member2 = member3 = None
     lecturer = None
     team = None
-    auth = AuthenticationSystem()
-    project = None
-    
-    # Main interactive loop
+
     while True:
         print("\n=== MAIN MENU ===")
         print("1. Create Users & Team")
         print("2. Login")
-        print("3. Logout")
-        print("4. View Dashboard")
-        print("5. Team Actions (Add/Remove Members)")
-        print("6. Project Actions (Create/Update Task)")
-        print("7. Meetings")
-        print("8. Exit")
+        print("3. Exit")
+
         choice = input("Choose an option: ").strip()
 
-         # Create users & team
+        # CREATE USERS & TEAM
         if choice == "1":
             if leader:
                 print("Users and team already created.")
                 continue
 
-            # Create users
             leader = TeamLeader("U1", "Lydia", "104816@siswa.unimas.my", "123")
             member1 = TeamMember("U2", "Euphrasia", "104073@siswa.unimas.my", "111")
             member2 = TeamMember("U3", "Lau Xu Kun", "84284@siswa.unimas.my", "222")
             member3 = TeamMember("U4", "Jordan", "102634@siswa.unimas.my", "333")
-            lecturer = Lecturer("U6", "Dr Tan Ping Ping", "pptan@unimas.my", "789")
+            lecturer = Lecturer("U6", "Dr Tan", "pptan@unimas.my", "789")
 
-            # Create team
             team = Team("T1", "OOSD Group 9", leader)
 
-            # Register users
             for u in [leader, member1, member2, member3, lecturer]:
                 auth.register(u)
 
             print("Users and team created successfully.")
 
-
         # LOGIN
         elif choice == "2":
             if not leader:
-                print("You must create users and team first.")
+                print("Create users first.")
                 continue
-            if auth.currentUser:
-                print(f"Already logged in as {auth.currentUser.name}")
-                continue
-            userID = input("Enter user ID: ").strip()
-            password = input("Enter password: ").strip()
-            auth.login(userID, password)
 
-        # LOGOUT
-        elif choice == "3":
-            auth.logout()
+            userID = input("User ID: ")
+            password = input("Password: ")
+            user = auth.login(userID, password)
 
-        # VIEW DASHBOARD
-        elif choice == "4":
-            if not auth.currentUser:
-                print("You must log in first.")
-                continue
-            user = auth.currentUser
-            if isinstance(user, TeamLeader):
-                print(user.viewDashboard(team))
-            elif isinstance(user, TeamMember):
-                print(user.viewDashboard())
-            elif isinstance(user, Lecturer):
-                print(user.viewDashboard())
-
-        # TEAM ACTIONS
-        elif choice == "5":
-            if not auth.currentUser:
-                print("You must log in first.")
-                continue
-            user = auth.currentUser
-
-            if isinstance(user, TeamLeader):
-                print("\nTeam Actions Menu:")
-                print("1. Add Member")
-                print("2. Remove Member")
-                team_choice = input("Choose an action: ").strip()
-
-                if team_choice == "1":
-                    print("Available members to add:")
-                    for m in [member1, member2, member3]:
-                        if m not in team.members:
-                            print(f"- {m.name}")
-                    member_name = input("Enter member name to add: ").strip()
-                    member_obj = next((m for m in [member1, member2, member3] if m.name == member_name), None)
-                    if member_obj:
-                        team.addMember(member_obj, auth)
-                    else:
-                        print("Member not found or already in team.")
-
-                elif team_choice == "2":
-                    print("Current team members:")
-                    for m in team.members:
-                        print(f"- {m.name}")
-                    member_name = input("Enter member name to remove: ").strip()
-                    member_obj = next((m for m in team.members if m.name == member_name), None)
-                    if member_obj:
-                        team.removeMember(leader, member_obj)
-                    else:
-                        print("Member not found.")
-
-            else:
-                print("Only the team leader can manage team members.")
-
-        # PROJECT ACTIONS
-        elif choice == "6":
-            if not auth.currentUser:
-                print("You must log in first.")
-                continue
-            user = auth.currentUser
-
-            if isinstance(user, TeamLeader):
-                if not team.project:
-                    project_title = input("Enter new project title: ").strip()
-                    project = Project("P1", project_title)
-                    user.createProject(team, project)
-                    print(f"Project '{project_title}' created.")
-                else:
-                    project = team.project
-
-                print("1. Create Task")
-                print("2. Update Task Status")
-                proj_choice = input("Choose an option: ").strip()
-
-                if proj_choice == "1":
-                    task_title = input("Enter task title: ").strip()
-                    description = input("Enter description: ").strip()
-                    assigned_member_name = input("Assign to member: ").strip()
-                    member_obj = next((m for m in team.members if m.name == assigned_member_name), None)
-                    if member_obj:
-                        task = Task(f"T{len(project.tasks)+1}", task_title, description, member_obj, "2025-06-30", "High")
-                        project.createTask(task)
-                    else:
-                        print("Member not found.")
-
-                elif proj_choice == "2":
-                    if not team.project.tasks:
-                        print("No tasks available.")
-                        continue
-                    print("Tasks:")
-                    for t in team.project.tasks:
-                        print(f"- {t.title} [{t.status}]")
-                    task_name = input("Enter task name to update: ").strip()
-                    task_obj = next((t for t in team.project.tasks if t.title == task_name), None)
-                    if task_obj:
-                        status = input("Enter new status (To Do/In Progress/Done): ").strip()
-                        task_obj.updateStatus(status)
-                    else:
-                        print("Task not found.")
-
-            elif isinstance(user, TeamMember):
-                if not team.project or not team.project.tasks:
-                    print("No tasks available.")
-                    continue
-                print("Your Tasks:")
-                for t in team.project.tasks:
-                    if t.member == user:
-                        print(f"- {t.title} [{t.status}]")
-                task_name = input("Enter task name to mark Done: ").strip()
-                task_obj = next((t for t in team.project.tasks if t.title == task_name and t.member == user), None)
-                if task_obj:
-                    user.updateTask(task_obj, "Done")
-                else:
-                    print("Task not found or not assigned to you.")
-
-            elif isinstance(user, Lecturer):
-                if not team.project:
-                    print("No project available.")
-                    continue
-                print(user.viewProject(team.project))
-
-        # MEETINGS
-        elif choice == "7":
-            if not auth.currentUser:
-                print("You must log in first.")
-                continue
-            user = auth.currentUser
-
-            print("1. Schedule Meeting")
-            print("2. Cancel Meeting")
-            meet_choice = input("Choose an option: ").strip()
-            if meet_choice == "1":
-                agenda = input("Enter meeting agenda: ").strip()
-                meeting = Meeting(f"M{len(team.meetings)+1}", agenda)
-                if isinstance(user, TeamLeader):
-                    user.scheduleMeeting(team, meeting)
-                    date_time = input("Enter date and time (e.g., 2025-06-05 10:00 AM): ").strip()
-                    meeting.scheduleMeeting(date_time)
-                else:
-                    print("Only Team Leader can schedule meetings.")
-            elif meet_choice == "2":
-                if not team.meetings:
-                    print("No meetings scheduled.")
-                    continue
-                for m in team.meetings:
-                    print(f"- {m.meetingID}: {m.agenda} [{m.dateTime}]")
-                meet_id = input("Enter meeting ID to cancel: ").strip()
-                meeting_obj = next((m for m in team.meetings if m.meetingID == meet_id), None)
-                if meeting_obj:
-                    if isinstance(user, TeamLeader):
-                        meeting_obj.cancelMeeting()
-                    else:
-                        print("Only Team Leader can cancel meetings.")
-                else:
-                    print("Meeting not found.")
+            if user:
+                user_menu(auth, team, [member1, member2, member3])
 
         # EXIT
-        elif choice == "8":
-            print("Exiting system. Goodbye!")
+        elif choice == "3":
+            print("Goodbye!")
             break
 
         else:
-            print("Invalid choice. Please select again.")
+            print("Invalid choice.")
+
 
 if __name__ == "__main__":
     run_tests()
