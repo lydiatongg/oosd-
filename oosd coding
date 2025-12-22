@@ -50,10 +50,27 @@ class User:
         # Display user details (can be overridden)
         return f"{self.name} ({self.__class__.__name__})"
 
+    def printDashboard(self, data, title="Dashboard"):
+        # Find the longest line (key + value)
+        content_width = max(len(f"{k}: {v}") for k, v in data.items())
+        title_width = len(title)
+        width = max(content_width, title_width) + 6  # padding
+        
+        print(f"\n=== {title} ===")
+        print("=" * width)
+        
+        for key, value in data.items():
+            print(f"{key:<15}: {value}")
+            
+        print("=" * width)
+
     # Overriden Method 1
     def viewDashboard(self):
-        return f"Default dashboard for {self.name}"
-
+        return {
+           "Role": self.__class__.__name__,
+            "Name": self.name
+        }
+        
     def displayProfile(self):
         print("\n--- User Profile ---")
         profile = {
@@ -98,18 +115,15 @@ class TeamLeader(User):
 
     # Overriden Method 1
     def viewDashboard(self, team=None):
-        print("\n=== Team Leader Dashboard ===")
-        dashboard = {
+        return {
             "Role": "Team Leader",
             "Name": self.name,
             "Team": team.teamName if team else "No team",
             "Members": len(team.members) if team else 0,
-            "Project": team.projects[-1].title if team and hasattr(team, "projects") and team.projects else "No project",
+            "Project": team.projects[-1].title if team and team.projects else "No project",
             "Meetings": len(team.meetings) if team else 0
         }
 
-        print("=============================")
-        return dashboard
 
     def createProject(self, team, title):
         if not hasattr(team, "projects"):
@@ -513,9 +527,11 @@ def user_menu(auth, team, members):
 
         if choice == "1":
             if isinstance(user, TeamLeader):
-                print(user.viewDashboard(team))
+                data = user.viewDashboard(team)
+                user.printDashboard(data, "Team Leader Dashboard")
             else:
-                print(user.viewDashboard())
+                data = user.viewDashboard()
+                user.printDashboard(data, f"{user.__class__.__name__} Dashboard")
 
         elif choice == "2":
             team_actions(user, team, auth, members)
@@ -543,6 +559,7 @@ def team_actions(user, team, auth, members):
     print("1. Add Member")
     print("2. Remove Member")
     choice = input("Choose an option: ").strip()
+    print() 
 
     if choice == "1":
         # Show available members not already in the team
@@ -564,6 +581,7 @@ def team_actions(user, team, auth, members):
             print("Member not found.")
 
     elif choice == "2":
+        print()
         # List current members
         print("Current team members:")
         for m in team.members:
@@ -595,10 +613,10 @@ def project_actions(user, team):
         print("\n=== Project Actions ===")
         print("1. Create Project")
         print("2. Select Project to Manage Tasks")
-        choice = input("Choose an option: ").strip()
+        choice = input("\nChoose an option: ").strip()
 
         if choice == "1":
-            title = input("Enter project title: ").strip()
+            title = input("\nEnter project title: ").strip()
             user.createProject(team, title)
 
         elif choice == "2":
@@ -621,7 +639,7 @@ def project_actions(user, team):
             # Task management menu
             print("\n1. Create Task")
             print("2. Update Task Status")
-            task_choice = input("Choose an option: ").strip()
+            task_choice = input("\nChoose an option: ").strip()
 
             if task_choice == "1":
                 title = input("Task title: ").strip()
