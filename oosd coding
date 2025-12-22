@@ -194,7 +194,7 @@ class Team:
     def addMember(self, member):
         # Add a member if max limit not exceeded
         total_members = len(self.members) + 1  # +1 for leader
-        if total_members > Team.MAX_MEMBERS:
+        if total_members >= Team.MAX_MEMBERS:
             print(f"Team '{self.teamName}' already has the maximum of {Team.MAX_MEMBERS} members")
             return False
         self.members.append(member)
