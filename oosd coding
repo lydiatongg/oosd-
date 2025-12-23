@@ -1,5 +1,9 @@
 from datetime import datetime
 
+# Members: Lydia Tong Su Min, Jordan Walter, Euphrasia Waja Dublin, Lau Xu Kun
+# Group: 9
+# Matric No: 104816, 102634, 104073, 84284
+
 # Authentication System
 # Handles user registration, login & logout functionality
 class AuthenticationSystem:
