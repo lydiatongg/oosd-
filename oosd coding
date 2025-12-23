@@ -219,6 +219,9 @@ class Lecturer(User):
             "Progress (%)": project.calculateProgress()
         }
 
+    def viewFeedbackSummary(self, feedbackSystem):
+        return feedbackSystem.generateSummary()
+
 # TEAM & PROJECT
 
 class Team:
@@ -364,6 +367,7 @@ class Task:
         self.lastUpdated = datetime.now()
         
         if notify:
+            print()
             updater = self.member.name if self.member else "System"
             self.notify(f"{updater} updated task '{self.title}' to '{status}'")
         if comment:
@@ -513,10 +517,11 @@ class Feedback:
         return {"Total Reviews": len(self._feedbackList), "Average Rating": round(average_rating, 2)}
 
     def showAllFeedback(self):
-        return self._feedbackList
+        for f in self._feedbackList:
+            print(f)
 
 # User Menu
-def user_menu(auth, team, members):
+def user_menu(auth, team, members, feedbackSystem):
     user = auth.currentUser
 
     while auth.currentUser:
@@ -525,7 +530,14 @@ def user_menu(auth, team, members):
         print("2. Team Actions")
         print("3. Project Actions")
         print("4. Meeting Actions")
-        print("5. Logout")
+        
+        if isinstance(user, TeamMember):
+            print("5. Give Peer Feedback")
+            
+        if isinstance(user, Lecturer):
+            print("6. View Peer Review Summary")
+
+        print("0. Logout")
 
         choice = input("Choose an option: ").strip()
 
@@ -546,7 +558,15 @@ def user_menu(auth, team, members):
         elif choice == "4":
             meeting_actions(user, team)
 
-        elif choice == "5":
+        elif choice == "5" and isinstance(user, TeamMember):
+            give_peer_feedback_ui(user, team, feedbackSystem)
+                
+        elif choice == "6" and isinstance(user, Lecturer):
+            summary = user.viewFeedbackSummary(feedbackSystem)
+            print("\n=== Peer Review Summary ===")
+            print (summary)
+            
+        elif choice == "0":
             auth.logout()
             break
 
@@ -629,6 +649,7 @@ def project_actions(user, team):
                 return
 
             # List available projects
+            print()
             print("Available projects:")
             for i, p in enumerate(team.projects, 1):
                 print(f"{i}. {p.title}")
@@ -686,34 +707,51 @@ def project_actions(user, team):
             print("No project available.")
             return
 
-        # Let the member select a project
         print("Available projects:")
         for i, p in enumerate(team.projects, 1):
             print(f"{i}. {p.title}")
+
         proj_choice = input("Select a project number: ").strip()
         if not proj_choice.isdigit() or int(proj_choice) not in range(1, len(team.projects)+1):
             print("Invalid selection.")
             return
 
-        project = team.projects[int(proj_choice)-1]
+        project = team.projects[int(proj_choice) - 1]
 
         available_tasks = [t for t in project.tasks if t.member == user and t.status != "Done"]
         if not available_tasks:
             print("No pending tasks assigned to you.")
             return
 
-        print("Your pending tasks:")
-        for t in available_tasks:
-            print(f"- {t.title} [{t.status}]")
+        print("\nYour pending tasks:")
+        for i, t in enumerate(available_tasks, 1):
+            print(f"{i}. {t.title} [{t.status}]")
 
-        name = input("Task to mark Done: ").strip()
-        task = next((t for t in available_tasks if t.title.strip() == name), None)
-        if not task:
-            print("Task not found or already completed.")
+        task_choice = input("Enter task number: ").strip()
+
+        if not task_choice.isdigit() or int(task_choice) not in range(1, len(available_tasks) + 1):
+            print("Invalid task selection.")
+            return
+
+        task = available_tasks[int(task_choice) - 1]
+
+
+        print("\n1. Mark as In Progress")
+        print("2. Mark as Done")
+        status_choice = input("Choose status: ").strip()
+
+        if status_choice == "1":
+            status = "In Progress"
+        elif status_choice == "2":
+            status = "Done"
+        else:
+            print("Invalid choice.")
             return
 
         comment = input("Add a comment (optional): ").strip()
-        user.updateTask(task, comment=comment if comment else None)
+        print()
+        user.updateTask(task, status=status, comment=comment if comment else None)
+
 
     # LECTURER: can view project progress
     elif isinstance(user, Lecturer):
@@ -794,10 +832,46 @@ def meeting_actions(user, team):
     else:
         print("Invalid choice. Please select 1 or 2.")
 
+# Peer Review UI
+def give_peer_feedback_ui(user, team, feedbackSystem):
+    # Allow feedback among team members including leader
+    peers = [m for m in team.members if m != user]
+
+
+    if not peers:
+        print("No peers available for review.")
+        return
+
+    print("\nAvailable peers:")
+    for i, p in enumerate(peers, 1):
+        print(f"{i}. {p.name}")
+
+    choice = input("Select peer number: ").strip()
+    if not choice.isdigit() or int(choice) not in range(1, len(peers)+1):
+        print("Invalid selection.")
+        return
+
+    reviewee = peers[int(choice)-1]
+    comment = input("Enter feedback comment: ").strip()
+    rating = input("Enter rating (1–5): ").strip()
+
+    if not rating.isdigit():
+        print("Rating must be a number.")
+        return
+
+    user.givePeerFeedback(
+        feedbackSystem,
+        reviewee,
+        comment,
+        int(rating)
+    )
+
+
 
 # Test Cases
 def run_tests():
     auth = AuthenticationSystem()
+    feedbackSystem = Feedback()
 
     leader = None
     member1 = member2 = member3 = None
@@ -843,7 +917,7 @@ def run_tests():
             user = auth.login(userID, password)
 
             if user:
-                user_menu(auth, team, [member1, member2, member3])
+                user_menu(auth, team, [member1, member2, member3], feedbackSystem)
 
         # EXIT
         elif choice == "3":
